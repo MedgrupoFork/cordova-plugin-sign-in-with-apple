@@ -1,9 +1,17 @@
 #import <AuthenticationServices/AuthenticationServices.h>
 #import <Cordova/CDVPlugin.h> // this already includes Foundation.h
 
-@interface SignInWithApple : CDVPlugin {
+@interface SignInWithApple : CDVPlugin <ASAuthorizationControllerDelegate,
+                                        ASAuthorizationControllerPresentationContextProviding> {
   NSMutableString *_callbackId;
 }
+
+// CORRECAO MEDGRUPO 1/2 -- retem o controller.
+// performRequests e assincrono. Como o controller era variavel local dentro de
+// signin:, o ARC liberava o objeto assim que o metodo retornava, e o delegate
+// nunca era chamado: nem sucesso nem erro. Do lado do app isso aparecia como a
+// tela de login girando para sempre, sem erro nenhum.
+@property (nonatomic, strong) ASAuthorizationController *authController;
 @end
 
 @implementation SignInWithApple
@@ -54,6 +62,13 @@
     ASAuthorizationController *controller = [[ASAuthorizationController alloc]
         initWithAuthorizationRequests:@[ request ]];
     controller.delegate = self;
+
+    // CORRECAO MEDGRUPO 2/2 -- define a janela onde a folha da Apple aparece.
+    // Sem presentationContextProvider o ASAuthorizationController nao tem ancora
+    // para apresentar e, dependendo da versao do iOS, falha em silencio.
+    controller.presentationContextProvider = self;
+
+    self.authController = controller;
     [controller performRequests];
 
   } else {
@@ -148,6 +163,7 @@
   CDVPluginResult *result =
       [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
                     messageAsDictionary:dic];
+  self.authController = nil;
   [self.commandDelegate sendPluginResult:result callbackId:_callbackId];
 }
 
@@ -169,7 +185,15 @@
                           ? error.localizedFailureReason
                           : @"",
                     }];
+  self.authController = nil;
   [self.commandDelegate sendPluginResult:result callbackId:_callbackId];
+}
+
+#pragma mark - ASAuthorizationControllerPresentationContextProviding
+
+- (ASPresentationAnchor)presentationAnchorForAuthorizationController:
+    (ASAuthorizationController *)controller API_AVAILABLE(ios(13.0)) {
+  return self.viewController.view.window;
 }
 
 @end
