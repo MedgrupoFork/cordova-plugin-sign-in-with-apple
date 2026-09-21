@@ -44,6 +44,45 @@
   }
 }
 
+/**
+ * Diagnostico MEDGRUPO.
+ *
+ * Quando a entitlement com.apple.developer.applesignin nao esta no perfil de
+ * provisionamento, o iOS recusa o performRequests SEM chamar nenhum metodo do
+ * delegate: nao chega sucesso nem erro, e o app fica esperando para sempre. Como
+ * o sintoma e identico ao de um controller liberado cedo demais, nao dava para
+ * separar as duas causas sem Xcode.
+ *
+ * Le o embedded.mobileprovision do proprio bundle (API publica) e diz se a
+ * entitlement esta la. Em build da App Store esse arquivo nao existe, por isso a
+ * resposta "indeterminado" -- nesse caso o diagnostico nao se aplica.
+ */
+- (void)diagnostico:(CDVInvokedUrlCommand *)command {
+  NSMutableDictionary *info = [NSMutableDictionary dictionary];
+  info[@"versaoIOS"] = [[UIDevice currentDevice] systemVersion];
+
+  NSString *caminho = [[NSBundle mainBundle] pathForResource:@"embedded"
+                                                      ofType:@"mobileprovision"];
+
+  if (caminho == nil) {
+    info[@"perfil"] = @"ausente";
+    info[@"entitlementAppleSignin"] = @"indeterminado";
+  } else {
+    NSData *dados = [NSData dataWithContentsOfFile:caminho];
+    NSString *texto = [[NSString alloc] initWithData:dados
+                                            encoding:NSISOLatin1StringEncoding];
+    info[@"perfil"] = @"presente";
+    info[@"entitlementAppleSignin"] =
+        ([texto rangeOfString:@"com.apple.developer.applesignin"].location != NSNotFound)
+            ? @"sim"
+            : @"NAO";
+  }
+
+  CDVPluginResult *result =
+      [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:info];
+  [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+}
+
 - (void)signin:(CDVInvokedUrlCommand *)command {
   NSDictionary *options = command.arguments[0];
   NSLog(@"SignInWithApple signin()");
